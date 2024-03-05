@@ -51,14 +51,17 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
 
     /// @dev Checks whether the caller has ASSET_ROLE.
     modifier onlyAssetRole(address _asset) {
+        // Modified: Only allowing ERC721 tokens to be listed
+        require(_getTokenType(_asset) == TokenType.ERC721, "Marketplace: listed token must be ERC721.");
         require(Permissions(address(this)).hasRoleWithSwitch(ASSET_ROLE, _asset), "!ASSET_ROLE");
         _;
     }
 
     /// @dev Checks whether caller is a listing creator.
-    modifier onlyListingCreator(uint256 _listingId) {
+    /// Modified: Changed the listing creator to the current owner of the NFT
+    modifier onlyCurrentListingNFTOwner(uint256 _listingId) {
         require(
-            _directListingsStorage().listings[_listingId].listingCreator == _msgSender(),
+            _currentListingNFTOwner(_directListingsStorage().listings[_listingId]) == _msgSender(),
             "Marketplace: not listing creator."
         );
         _;
@@ -85,12 +88,16 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
                             External functions
     //////////////////////////////////////////////////////////////*/
 
+    // Modified: Only allowing ERC721 tokens to be listed
     /// @notice List NFTs (ERC721 or ERC1155) for sale at a fixed price.
     function createListing(
         ListingParameters calldata _params
     ) external onlyListerRole onlyAssetRole(_params.assetContract) returns (uint256 listingId) {
         listingId = _getNextListingId();
-        address listingCreator = _msgSender();
+        address listingCreator = _ownerOfERC721(_params.assetContract, _params.tokenId);
+
+        require(listingCreator == _msgSender(), "Marketplace: not owner of token.");
+
         TokenType tokenType = _getTokenType(_params.assetContract);
 
         uint128 startTime = _params.startTimestamp;
@@ -109,7 +116,8 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
 
         Listing memory listing = Listing({
             listingId: listingId,
-            listingCreator: listingCreator,
+            // Modified: concept of listingCreator replaced with current listing nft owner
+            listingCreator: address(0),
             assetContract: _params.assetContract,
             tokenId: _params.tokenId,
             quantity: _params.quantity,
@@ -124,15 +132,23 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
 
         _directListingsStorage().listings[listingId] = listing;
 
-        emit NewListing(listingCreator, listingId, _params.assetContract, listing);
+        emit NewListing(address(0), listingId, _params.assetContract, listing);
     }
 
     /// @notice Update parameters of a listing of NFTs.
     function updateListing(
         uint256 _listingId,
         ListingParameters memory _params
-    ) external onlyExistingListing(_listingId) onlyAssetRole(_params.assetContract) onlyListingCreator(_listingId) {
-        address listingCreator = _msgSender();
+    )
+        external
+        onlyExistingListing(_listingId)
+        onlyAssetRole(_params.assetContract)
+        onlyCurrentListingNFTOwner(_listingId)
+    {
+        address listingCreator = _ownerOfERC721(_params.assetContract, _params.tokenId);
+
+        require(listingCreator == _msgSender(), "Marketplace: not owner of token.");
+
         Listing memory listing = _directListingsStorage().listings[_listingId];
         TokenType tokenType = _getTokenType(_params.assetContract);
 
@@ -194,7 +210,9 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
     }
 
     /// @notice Cancel a listing.
-    function cancelListing(uint256 _listingId) external onlyExistingListing(_listingId) onlyListingCreator(_listingId) {
+    function cancelListing(
+        uint256 _listingId
+    ) external onlyExistingListing(_listingId) onlyCurrentListingNFTOwner(_listingId) {
         _directListingsStorage().listings[_listingId].status = IDirectListings.Status.CANCELLED;
         emit CancelledListing(_msgSender(), _listingId);
     }
@@ -204,7 +222,7 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
         uint256 _listingId,
         address _buyer,
         bool _toApprove
-    ) external onlyExistingListing(_listingId) onlyListingCreator(_listingId) {
+    ) external onlyExistingListing(_listingId) onlyCurrentListingNFTOwner(_listingId) {
         require(_directListingsStorage().listings[_listingId].reserved, "Marketplace: listing not reserved.");
 
         _directListingsStorage().isBuyerApprovedForListing[_listingId][_buyer] = _toApprove;
@@ -217,7 +235,7 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
         uint256 _listingId,
         address _currency,
         uint256 _pricePerTokenInCurrency
-    ) external onlyExistingListing(_listingId) onlyListingCreator(_listingId) {
+    ) external onlyExistingListing(_listingId) onlyCurrentListingNFTOwner(_listingId) {
         Listing memory listing = _directListingsStorage().listings[_listingId];
         require(
             _currency != listing.currency || _pricePerTokenInCurrency == listing.pricePerToken,
@@ -256,7 +274,7 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
 
         require(
             _validateOwnershipAndApproval(
-                listing.listingCreator,
+                _currentListingNFTOwner(listing),
                 listing.assetContract,
                 listing.tokenId,
                 _quantity,
@@ -284,16 +302,25 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
             _validateERC20BalAndAllowance(buyer, _currency, targetTotalPrice);
         }
 
-        if (listing.quantity == _quantity) {
-            _directListingsStorage().listings[_listingId].status = IDirectListings.Status.COMPLETED;
-        }
-        _directListingsStorage().listings[_listingId].quantity -= _quantity;
+        // PERPETUAL:
+        // - never set listing as completed or modify quantity
 
-        _payout(buyer, listing.listingCreator, _currency, targetTotalPrice, listing);
-        _transferListingTokens(listing.listingCreator, _buyFor, _quantity, listing);
+        // if (listing.quantity == _quantity) {
+        //     _directListingsStorage().listings[_listingId].status = IDirectListings.Status.COMPLETED;
+        // }
+        // _directListingsStorage().listings[_listingId].quantity -= _quantity;
+
+        address currentListingOwner = _currentListingNFTOwner(listing);
+
+        _payout(buyer, currentListingOwner, _currency, targetTotalPrice, listing);
+
+        // PERPETUAL:
+        // - transfer from direct owner of NFT instead of listing creator
+        // _transferListingTokens(listing.listingCreator, _buyFor, _quantity, listing);
+        _transferListingTokens(currentListingOwner, _buyFor, _quantity, listing);
 
         emit NewSale(
-            listing.listingCreator,
+            currentListingOwner,
             listing.listingId,
             listing.assetContract,
             listing.tokenId,
@@ -426,7 +453,7 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
             _targetListing.endTimestamp > block.timestamp &&
             _targetListing.status == IDirectListings.Status.CREATED &&
             _validateOwnershipAndApproval(
-                _targetListing.listingCreator,
+                _currentListingNFTOwner(_targetListing),
                 _targetListing.assetContract,
                 _targetListing.tokenId,
                 _targetListing.quantity,
@@ -442,6 +469,7 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
         uint256 _quantity,
         TokenType _tokenType
     ) internal view returns (bool isValid) {
+        // return true;
         address market = address(this);
 
         if (_tokenType == TokenType.ERC1155) {
@@ -559,6 +587,15 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
             amountRemaining,
             _nativeTokenWrapper
         );
+    }
+
+    function _currentListingNFTOwner(Listing memory _listing) internal view returns (address) {
+        // PERPETUAL: Replace the listingCreator concept with the current owner of the NFT silently
+        return _ownerOfERC721(_listing.assetContract, _listing.tokenId);
+    }
+
+    function _ownerOfERC721(address _assetContract, uint256 _tokenId) internal view returns (address) {
+        return IERC721(_assetContract).ownerOf(_tokenId);
     }
 
     /// @dev Returns the DirectListings storage.
