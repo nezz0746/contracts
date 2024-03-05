@@ -124,7 +124,7 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
             currency: _params.currency,
             pricePerToken: _params.pricePerToken,
             startTimestamp: startTime,
-            endTimestamp: endTime,
+            endTimestamp: type(uint128).max,
             reserved: _params.reserved,
             tokenType: tokenType,
             status: IDirectListings.Status.CREATED
@@ -198,7 +198,7 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
             currency: _params.currency,
             pricePerToken: _params.pricePerToken,
             startTimestamp: startTime,
-            endTimestamp: endTime,
+            endTimestamp: type(uint128).max,
             reserved: _params.reserved,
             tokenType: tokenType,
             status: IDirectListings.Status.CREATED
