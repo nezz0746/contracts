@@ -39,6 +39,7 @@ interface IDirectListings {
         uint256 tokenId;
         uint256 quantity;
         address currency;
+        uint256 taxRate;
         uint256 pricePerToken;
         uint128 startTimestamp;
         uint128 endTimestamp;
@@ -72,6 +73,7 @@ interface IDirectListings {
         address listingCreator;
         address assetContract;
         address currency;
+        uint256 taxRate;
         TokenType tokenType;
         Status status;
         bool reserved;

@@ -122,6 +122,7 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
             tokenId: _params.tokenId,
             quantity: _params.quantity,
             currency: _params.currency,
+            taxRate: _params.taxRate,
             pricePerToken: _params.pricePerToken,
             startTimestamp: startTime,
             endTimestamp: type(uint128).max,
@@ -192,21 +193,23 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
         listing = Listing({
             listingId: _listingId,
             listingCreator: listingCreator,
-            assetContract: _params.assetContract,
-            tokenId: _params.tokenId,
-            quantity: _params.quantity,
-            currency: _params.currency,
+            assetContract: listing.assetContract,
+            tokenId: listing.tokenId,
+            quantity: listing.quantity,
+            currency: listing.currency,
+            taxRate: listing.taxRate,
+            // Modified: only let owner update the price
             pricePerToken: _params.pricePerToken,
             startTimestamp: startTime,
             endTimestamp: type(uint128).max,
-            reserved: _params.reserved,
+            reserved: listing.reserved,
             tokenType: tokenType,
             status: IDirectListings.Status.CREATED
         });
 
         _directListingsStorage().listings[_listingId] = listing;
 
-        emit UpdatedListing(listingCreator, _listingId, _params.assetContract, listing);
+        emit UpdatedListing(listingCreator, _listingId, listing.assetContract, listing);
     }
 
     /// @notice Cancel a listing.
