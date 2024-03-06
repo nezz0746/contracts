@@ -29,6 +29,7 @@ interface IDirectListings {
      *  @param quantity The quantity of NFTs being listed. This must be non-zero, and is expected to
      *                  be `1` for ERC-721 NFTs.
      *  @param currency The currency in which the price must be paid when buying the listed NFTs.
+     *  @param taxRate The tax rate to be paid when buying the listed NFTs.
      *  @param pricePerToken The price to pay per unit of NFTs listed.
      *  @param startTimestamp The UNIX timestamp at and after which NFTs can be bought from the listing.
      *  @param endTimestamp The UNIX timestamp at and after which NFTs cannot be bought from the listing.
@@ -56,6 +57,7 @@ interface IDirectListings {
      *  @param quantity The quantity of NFTs being listed. This must be non-zero, and is expected to
      *                  be `1` for ERC-721 NFTs.
      *  @param currency The currency in which the price must be paid when buying the listed NFTs.
+     *  @param taxRate The tax rate to be paid when buying the listed NFTs.
      *  @param pricePerToken The price to pay per unit of NFTs listed.
      *  @param startTimestamp The UNIX timestamp at and after which NFTs can be bought from the listing.
      *  @param endTimestamp The UNIX timestamp at and after which NFTs cannot be bought from the listing.
