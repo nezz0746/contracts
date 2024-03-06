@@ -60,5 +60,10 @@
     "gas": "forge snapshot --mc Benchmark --gas-report --diff .gas-snapshot > gasreport.txt",
     "forge:snapshot": "forge snapshot --check",
     "aabenchmark": "forge test --mc AABenchmarkPrepare && forge test --mc ProfileThirdwebAccount -vvv"
+  },
+  "dependencies": {
+    "@prb/math": "^4.0.2",
+    "@sablier/v2-core": "^1.1.2",
+    "@sablier/v2-periphery": "^1.1.1"
   }
 }
