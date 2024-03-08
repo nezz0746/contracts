@@ -10,9 +10,6 @@ import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import "../../../eip/interface/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/interfaces/IERC2981.sol";
-import { ud60x18 } from "@prb/math/src/UD60x18.sol";
-import { ISablierV2LockupLinear } from "@sablier/v2-core/src/interfaces/ISablierV2LockupLinear.sol";
-import { Broker, LockupLinear } from "@sablier/v2-core/src/types/DataTypes.sol";
 
 // ====== Internal imports ======
 
@@ -22,11 +19,17 @@ import "../../../extension/upgradeable/ReentrancyGuard.sol";
 import "../../../extension/upgradeable/PermissionsEnumerable.sol";
 import { RoyaltyPaymentsLogic } from "../../../extension/upgradeable/RoyaltyPayments.sol";
 import { CurrencyTransferLib } from "../../../lib/CurrencyTransferLib.sol";
+import { ISuperToken } from "@superfluid-finance/ethereum-contracts/contracts/interfaces/superfluid/ISuperfluid.sol";
+import { SuperTokenV1Library } from "@superfluid-finance/ethereum-contracts/contracts/apps/SuperTokenV1Library.sol";
 
 /**
  * @author  thirdweb.com
  */
 contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771ContextConsumer {
+    using SuperTokenV1Library for ISuperToken;
+
+    mapping(address => address) public tokenXs;
+
     /*///////////////////////////////////////////////////////////////
                         Constants / Immutables
     //////////////////////////////////////////////////////////////*/
@@ -35,6 +38,8 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
     bytes32 private constant LISTER_ROLE = keccak256("LISTER_ROLE");
     /// @dev Only assets from NFT contracts with asset role can be listed, when listings are restricted by asset address.
     bytes32 private constant ASSET_ROLE = keccak256("ASSET_ROLE");
+    /// @dev Only tax manager role holders can set allowed currencies for tax
+    bytes32 private constant TAX_MANAGER_ROLE = keccak256("TAX_MANAGER_ROLE");
 
     /// @dev The max bps of the contract. So, 10_000 == 100 %
     uint64 private constant MAX_BPS = 10_000;
@@ -57,6 +62,12 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
         // Modified: Only allowing ERC721 tokens to be listed
         require(_getTokenType(_asset) == TokenType.ERC721, "Marketplace: listed token must be ERC721.");
         require(Permissions(address(this)).hasRoleWithSwitch(ASSET_ROLE, _asset), "!ASSET_ROLE");
+        _;
+    }
+
+    /// @dev Checks whether the caller has TAX_MANAGER_ROLE.
+    modifier onlyTaxManagerRole() {
+        require(Permissions(address(this)).hasRoleWithSwitch(TAX_MANAGER_ROLE, _msgSender()), "!TAX_MANAGER_ROLE");
         _;
     }
 
@@ -126,6 +137,7 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
             quantity: _params.quantity,
             currency: _params.currency,
             taxRate: _params.taxRate,
+            taxBeneficiary: _params.taxBeneficiary,
             pricePerToken: _params.pricePerToken,
             startTimestamp: startTime,
             endTimestamp: type(uint128).max,
@@ -201,6 +213,7 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
             quantity: listing.quantity,
             currency: listing.currency,
             taxRate: listing.taxRate,
+            taxBeneficiary: listing.taxBeneficiary,
             // Modified: only let owner update the price
             pricePerToken: _params.pricePerToken,
             startTimestamp: startTime,
@@ -266,6 +279,7 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
         uint256 _expectedTotalPrice
     ) external payable nonReentrant onlyExistingListing(_listingId) {
         Listing memory listing = _directListingsStorage().listings[_listingId];
+        require(_msgSender() == _buyFor, "Marketplace: msg.sender must be the buyer.");
         address buyer = _msgSender();
 
         require(
@@ -295,6 +309,7 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
             targetTotalPrice = _quantity * _directListingsStorage().currencyPriceForListing[_listingId][_currency];
         } else {
             require(_currency == listing.currency, "Paying in invalid currency.");
+            require(tokenXs[_currency] != address(0), "Marketplace: invalid currency");
             targetTotalPrice = _quantity * listing.pricePerToken;
         }
 
@@ -319,6 +334,8 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
         address currentListingOwner = _currentListingNFTOwner(listing);
 
         _payout(buyer, currentListingOwner, _currency, targetTotalPrice, listing);
+
+        _createStream(_currency, _buyFor, listing.taxBeneficiary, _getFlowRate(listing.taxRate, targetTotalPrice));
 
         // PERPETUAL:
         // - transfer from direct owner of NFT instead of listing creator
@@ -593,6 +610,32 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
             amountRemaining,
             _nativeTokenWrapper
         );
+    }
+
+    function _createStream(address currency, address sender, address receiver, int96 flowRate) internal {
+        ISuperToken(tokenXs[currency]).createFlowFrom(sender, receiver, flowRate);
+    }
+
+    function _updateStream(address currency, address sender, address receiver, int96 flowRate) internal {
+        ISuperToken(tokenXs[currency]).updateFlowFrom(sender, receiver, flowRate);
+    }
+
+    function _cancelStream(address sender, address receiver) internal {
+        ISuperToken(tokenXs[sender]).deleteFlowFrom(sender, receiver);
+    }
+
+    function setTokenX(address underlyingToken, address superToken) external onlyTaxManagerRole {
+        tokenXs[underlyingToken] = superToken;
+    }
+
+    function _getFlowRate(uint256 taxRateBPS, uint256 price) internal pure returns (int96) {
+        uint256 duePerWeek = _taxDuePerWeek(taxRateBPS, price);
+
+        return int96(int256(duePerWeek / 7 days));
+    }
+
+    function _taxDuePerWeek(uint256 taxRateBPS, uint256 price) internal pure returns (uint256) {
+        return (price * taxRateBPS) / MAX_BPS;
     }
 
     function _currentListingNFTOwner(Listing memory _listing) internal view returns (address) {

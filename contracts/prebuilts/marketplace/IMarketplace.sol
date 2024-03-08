@@ -29,7 +29,8 @@ interface IDirectListings {
      *  @param quantity The quantity of NFTs being listed. This must be non-zero, and is expected to
      *                  be `1` for ERC-721 NFTs.
      *  @param currency The currency in which the price must be paid when buying the listed NFTs.
-     *  @param taxRate The tax rate to be paid when buying the listed NFTs.
+     *  @param taxRate The tax rate of currency per week in BPS
+     *  @param taxBeneficiary The address of the beneficiary of the tax.
      *  @param pricePerToken The price to pay per unit of NFTs listed.
      *  @param startTimestamp The UNIX timestamp at and after which NFTs can be bought from the listing.
      *  @param endTimestamp The UNIX timestamp at and after which NFTs cannot be bought from the listing.
@@ -41,6 +42,7 @@ interface IDirectListings {
         uint256 quantity;
         address currency;
         uint256 taxRate;
+        address taxBeneficiary;
         uint256 pricePerToken;
         uint128 startTimestamp;
         uint128 endTimestamp;
@@ -57,7 +59,8 @@ interface IDirectListings {
      *  @param quantity The quantity of NFTs being listed. This must be non-zero, and is expected to
      *                  be `1` for ERC-721 NFTs.
      *  @param currency The currency in which the price must be paid when buying the listed NFTs.
-     *  @param taxRate The tax rate to be paid when buying the listed NFTs.
+     *  @param taxRate The tax rate of currency per week in BPS
+     *  @param taxBeneficiary The address of the beneficiary of the tax.
      *  @param pricePerToken The price to pay per unit of NFTs listed.
      *  @param startTimestamp The UNIX timestamp at and after which NFTs can be bought from the listing.
      *  @param endTimestamp The UNIX timestamp at and after which NFTs cannot be bought from the listing.
@@ -76,6 +79,7 @@ interface IDirectListings {
         address assetContract;
         address currency;
         uint256 taxRate;
+        address taxBeneficiary;
         TokenType tokenType;
         Status status;
         bool reserved;
