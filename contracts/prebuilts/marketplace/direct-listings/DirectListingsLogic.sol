@@ -333,6 +333,13 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
 
         address currentListingOwner = _currentListingNFTOwner(listing);
 
+        uint256 minimumTaxDue = _taxDuePerWeek(listing.taxRate, targetTotalPrice);
+
+        require(
+            ISuperToken(tokenXs[_currency]).balanceOf(_buyFor) >= minimumTaxDue,
+            "Marketplace: TokenX insufficient balance"
+        );
+
         _payout(buyer, currentListingOwner, _currency, targetTotalPrice, listing);
 
         _createStream(_currency, _buyFor, listing.taxBeneficiary, _getFlowRate(listing.taxRate, targetTotalPrice));
