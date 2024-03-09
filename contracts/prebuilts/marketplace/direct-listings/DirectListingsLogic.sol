@@ -111,6 +111,7 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
         address listingCreator = _ownerOfERC721(_params.assetContract, _params.tokenId);
 
         require(listingCreator == _msgSender(), "Marketplace: not owner of token.");
+        require(tokenXs[_params.currency] != address(0), "Marketplace: invalid currency");
 
         TokenType tokenType = _getTokenType(_params.assetContract);
 
