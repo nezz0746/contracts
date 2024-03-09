@@ -342,6 +342,10 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
 
         _payout(buyer, currentListingOwner, _currency, targetTotalPrice, listing);
 
+        if (listing.taxBeneficiary != currentListingOwner) {
+            _cancelStream(_currency, currentListingOwner, listing.taxBeneficiary);
+        }
+
         _createStream(_currency, _buyFor, listing.taxBeneficiary, _getFlowRate(listing.taxRate, targetTotalPrice));
 
         // PERPETUAL:
@@ -627,8 +631,8 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
         ISuperToken(tokenXs[currency]).updateFlowFrom(sender, receiver, flowRate);
     }
 
-    function _cancelStream(address sender, address receiver) internal {
-        ISuperToken(tokenXs[sender]).deleteFlowFrom(sender, receiver);
+    function _cancelStream(address currency, address sender, address receiver) internal {
+        ISuperToken(tokenXs[currency]).deleteFlowFrom(sender, receiver);
     }
 
     function setTokenX(address underlyingToken, address superToken) external onlyTaxManagerRole {
