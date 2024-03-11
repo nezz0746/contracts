@@ -21,6 +21,7 @@ import { RoyaltyPaymentsLogic } from "../../../extension/upgradeable/RoyaltyPaym
 import { CurrencyTransferLib } from "../../../lib/CurrencyTransferLib.sol";
 import { ISuperToken } from "@superfluid-finance/ethereum-contracts/contracts/interfaces/superfluid/ISuperfluid.sol";
 import { SuperTokenV1Library } from "@superfluid-finance/ethereum-contracts/contracts/apps/SuperTokenV1Library.sol";
+import { console } from "forge-std/Test.sol";
 
 /**
  * @author  thirdweb.com
@@ -344,11 +345,7 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
 
         _payout(buyer, currentListingOwner, _currency, targetTotalPrice, listing);
 
-        if (listing.taxBeneficiary != currentListingOwner) {
-            _cancelStream(_currency, currentListingOwner, listing.taxBeneficiary);
-        }
-
-        _createStream(_currency, _buyFor, listing.taxBeneficiary, _getFlowRate(listing.taxRate, targetTotalPrice));
+        _handleTaxStreams(_currency, currentListingOwner, buyer, listing.taxBeneficiary, listing);
 
         // PERPETUAL:
         // - transfer from direct owner of NFT instead of listing creator
@@ -533,7 +530,8 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
         }
     }
 
-    /// @dev Validates that `_tokenOwner` owns and has approved Markeplace to transfer the appropriate amount of currency
+    /// @dev Validates that `_tokenOwner` owns and has approved Markeplace to transfer the appropriate amount
+    /// of currency
     function _validateERC20BalAndAllowance(address _tokenOwner, address _currency, uint256 _amount) internal view {
         require(
             IERC20(_currency).balanceOf(_tokenOwner) >= _amount &&
@@ -623,6 +621,34 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
             amountRemaining,
             _nativeTokenWrapper
         );
+    }
+
+    function _handleTaxStreams(
+        address _currency,
+        address previousSender,
+        address newSender,
+        address receiver,
+        Listing memory listing
+    ) internal {
+        int96 listingFlowRate = _getFlowRate(listing.taxRate, listing.pricePerToken);
+
+        (, int96 previousSenderFlowRate, , ) = ISuperToken(tokenXs[_currency]).getFlowInfo(previousSender, receiver);
+
+        // Cancel of reduce stream flow of account about to sell the NFT
+        if (receiver != _currentListingNFTOwner(listing)) {
+            if (previousSenderFlowRate > listingFlowRate)
+                _updateStream(_currency, previousSender, receiver, previousSenderFlowRate - listingFlowRate);
+            else _cancelStream(_currency, previousSender, receiver);
+        }
+
+        (, int96 newSenderFlowRate, , ) = ISuperToken(tokenXs[_currency]).getFlowInfo(newSender, receiver);
+
+        // Create or update stream flow of account about to buy the NFT
+        if (newSenderFlowRate == 0) {
+            _createStream(_currency, newSender, receiver, listingFlowRate);
+        } else {
+            _updateStream(_currency, newSender, receiver, listingFlowRate + newSenderFlowRate);
+        }
     }
 
     function _createStream(address currency, address sender, address receiver, int96 flowRate) internal {
