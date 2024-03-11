@@ -280,9 +280,10 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
         uint256 _expectedTotalPrice
     ) external payable nonReentrant onlyExistingListing(_listingId) {
         Listing memory listing = _directListingsStorage().listings[_listingId];
-        require(_msgSender() == _buyFor, "Marketplace: msg.sender must be the buyer.");
         address buyer = _msgSender();
 
+        require(_buyFor == buyer, "Marketplace: msg.sender must be the buyer.");
+        require(_buyFor != _currentListingNFTOwner(listing), "Marketplace: cannot buy from self.");
         require(
             !listing.reserved || _directListingsStorage().isBuyerApprovedForListing[_listingId][buyer],
             "buyer not approved"
