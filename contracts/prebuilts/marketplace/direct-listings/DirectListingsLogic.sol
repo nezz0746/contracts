@@ -234,8 +234,13 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
     function cancelListing(
         uint256 _listingId
     ) external onlyExistingListing(_listingId) onlyCurrentListingNFTOwner(_listingId) {
-        _directListingsStorage().listings[_listingId].status = IDirectListings.Status.CANCELLED;
-        emit CancelledListing(_msgSender(), _listingId);
+        // TODO Implement a "Give up lease" feature
+        // * Update/Cancel stream to beneficiary
+        // * Transfer NFT to beneficiary
+        revert("Not implemented yet");
+
+        // _directListingsStorage().listings[_listingId].status = IDirectListings.Status.CANCELLED;
+        // emit CancelledListing(_msgSender(), _listingId);
     }
 
     /// @notice Approve a buyer to buy from a reserved listing.
