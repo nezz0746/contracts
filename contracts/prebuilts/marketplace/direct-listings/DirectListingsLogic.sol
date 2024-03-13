@@ -134,6 +134,7 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
             listingId: listingId,
             // Modified: concept of listingCreator replaced with current listing nft owner
             listingCreator: address(0),
+            listingOwner: _params.taxBeneficiary,
             assetContract: _params.assetContract,
             tokenId: _params.tokenId,
             quantity: _params.quantity,
@@ -210,6 +211,7 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
         listing = Listing({
             listingId: _listingId,
             listingCreator: listingCreator,
+            listingOwner: listing.listingOwner,
             assetContract: listing.assetContract,
             tokenId: listing.tokenId,
             quantity: listing.quantity,
@@ -356,6 +358,8 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
         // - transfer from direct owner of NFT instead of listing creator
         // _transferListingTokens(listing.listingCreator, _buyFor, _quantity, listing);
         _transferListingTokens(currentListingOwner, _buyFor, _quantity, listing);
+
+        _directListingsStorage().listings[_listingId].listingOwner = _buyFor;
 
         emit NewSale(
             currentListingOwner,

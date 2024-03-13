@@ -54,6 +54,7 @@ interface IDirectListings {
      *
      *  @param listingId The unique ID of the listing.
      *  @param listingCreator The creator of the listing.
+     *  @param listingOwner PERPETUAL: in the context of perpetual listings, we introduce listing owner
      *  @param assetContract The address of the smart contract of the NFTs being listed.
      *  @param tokenId The tokenId of the NFTs being listed.
      *  @param quantity The quantity of NFTs being listed. This must be non-zero, and is expected to
@@ -76,6 +77,7 @@ interface IDirectListings {
         uint128 startTimestamp;
         uint128 endTimestamp;
         address listingCreator;
+        address listingOwner;
         address assetContract;
         address currency;
         uint256 taxRate;
