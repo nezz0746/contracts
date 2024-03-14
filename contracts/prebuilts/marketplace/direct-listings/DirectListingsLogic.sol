@@ -208,6 +208,14 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
 
         _validateNewListing(_params, tokenType);
 
+        // Get total flowRate to beneficiary
+        (, int96 totalFlowRate, , ) = ISuperToken(tokenXs[listing.currency]).getFlowInfo(
+            listingCreator,
+            listing.taxBeneficiary
+        );
+        // Get current listing flowRate
+        int96 listingFlowRate = _getFlowRate(listing.taxRate, listing.pricePerToken);
+
         listing = Listing({
             listingId: _listingId,
             listingCreator: listingCreator,
@@ -228,6 +236,28 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
         });
 
         _directListingsStorage().listings[_listingId] = listing;
+
+        // Get new listing flowRate
+        int96 newListingFlowRate = _getFlowRate(listing.taxRate, listing.pricePerToken);
+
+        // Update stream flow of listing creator
+        if (totalFlowRate > 0 && listingCreator != listing.taxBeneficiary) {
+            if (newListingFlowRate > listingFlowRate) {
+                _updateStream(
+                    listing.currency,
+                    listingCreator,
+                    listing.taxBeneficiary,
+                    totalFlowRate + newListingFlowRate - listingFlowRate
+                );
+            } else {
+                _updateStream(
+                    listing.currency,
+                    listingCreator,
+                    listing.taxBeneficiary,
+                    totalFlowRate - listingFlowRate + newListingFlowRate
+                );
+            }
+        }
 
         emit UpdatedListing(listingCreator, _listingId, listing.assetContract, listing);
     }
