@@ -262,17 +262,28 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
         emit UpdatedListing(listingCreator, _listingId, listing.assetContract, listing);
     }
 
-    /// @notice Cancel a listing.
+    /// @notice Cancel a listing. Cancelling the perpetual listing means giving up ownership of the NFT
+    /// and sending back to the beneficiary. Stream is also cancelled.
     function cancelListing(
         uint256 _listingId
     ) external onlyExistingListing(_listingId) onlyCurrentListingNFTOwner(_listingId) {
-        // TODO Implement a "Give up lease" feature
-        // * Update/Cancel stream to beneficiary
-        // * Transfer NFT to beneficiary
-        revert("Not implemented yet");
+        Listing memory listing = _directListingsStorage().listings[_listingId];
 
-        // _directListingsStorage().listings[_listingId].status = IDirectListings.Status.CANCELLED;
-        // emit CancelledListing(_msgSender(), _listingId);
+        address listingOwner = _currentListingNFTOwner(listing);
+        // Get total flowRate to beneficiary
+        (, int96 totalFlowRate, , ) = ISuperToken(tokenXs[listing.currency]).getFlowInfo(
+            listingOwner,
+            listing.taxBeneficiary
+        );
+        int96 listingFlowRate = _getFlowRate(listing.taxRate, listing.pricePerToken);
+
+        if (totalFlowRate > listingFlowRate)
+            _updateStream(listing.currency, listingOwner, listing.taxBeneficiary, totalFlowRate - listingFlowRate);
+        else _cancelStream(listing.currency, listingOwner, listing.taxBeneficiary);
+
+        _transferListingTokens(listingOwner, listing.taxBeneficiary, listing.quantity, listing);
+
+        emit CancelledListing(_msgSender(), _listingId);
     }
 
     /// @notice Approve a buyer to buy from a reserved listing.
