@@ -41,12 +41,16 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
     bytes32 private constant ASSET_ROLE = keccak256("ASSET_ROLE");
     /// @dev Only tax manager role holders can set allowed currencies for tax
     bytes32 private constant TAX_MANAGER_ROLE = keccak256("TAX_MANAGER_ROLE");
+    /// @dev Only landlord role holders can foreclose listings
+    bytes32 private constant LANDLORD_ROLE = keccak256("LANDLORD_ROLE");
 
     /// @dev The max bps of the contract. So, 10_000 == 100 %
     uint64 private constant MAX_BPS = 10_000;
 
     /// @dev The address of the native token wrapper contract.
     address private immutable nativeTokenWrapper;
+
+    event TokenXSet(address indexed underlyingToken, address indexed superToken);
 
     /*///////////////////////////////////////////////////////////////
                             Modifier
@@ -286,6 +290,35 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
         emit CancelledListing(_msgSender(), _listingId);
     }
 
+    function forecloseListing(uint256 _listingId) external onlyExistingListing(_listingId) {
+        Listing memory listing = _directListingsStorage().listings[_listingId];
+
+        require(
+            _msgSender() == listing.taxBeneficiary ||
+                Permissions(address(this)).hasRoleWithSwitch(LANDLORD_ROLE, _msgSender()),
+            "Marketplace: not tax beneficiary or landlord"
+        );
+
+        require(
+            ISuperToken(tokenXs[listing.currency]).balanceOf(_currentListingNFTOwner(listing)) == 0,
+            "Marketplace: current listing owner has balance"
+        );
+
+        address listingOwner = _currentListingNFTOwner(listing);
+        // Get total flowRate to beneficiary
+        (, int96 totalFlowRate, , ) = ISuperToken(tokenXs[listing.currency]).getFlowInfo(
+            listingOwner,
+            listing.taxBeneficiary
+        );
+        int96 listingFlowRate = _getFlowRate(listing.taxRate, listing.pricePerToken);
+
+        if (totalFlowRate > listingFlowRate)
+            _updateStream(listing.currency, listingOwner, listing.taxBeneficiary, totalFlowRate - listingFlowRate);
+        else _cancelStream(listing.currency, listingOwner, listing.taxBeneficiary);
+
+        _transferListingTokens(listingOwner, listing.taxBeneficiary, listing.quantity, listing);
+    }
+
     /// @notice Approve a buyer to buy from a reserved listing.
     function approveBuyerForListing(
         uint256 _listingId,
@@ -411,6 +444,13 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
             _quantity,
             targetTotalPrice
         );
+    }
+
+    /// @notice Set the tokenX address for a currency
+    function setTokenX(address underlyingToken, address superToken) external onlyTaxManagerRole {
+        tokenXs[underlyingToken] = superToken;
+
+        emit TokenXSet(underlyingToken, superToken);
     }
 
     /*///////////////////////////////////////////////////////////////
@@ -711,10 +751,6 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
 
     function _cancelStream(address currency, address sender, address receiver) internal {
         ISuperToken(tokenXs[currency]).deleteFlowFrom(sender, receiver);
-    }
-
-    function setTokenX(address underlyingToken, address superToken) external onlyTaxManagerRole {
-        tokenXs[underlyingToken] = superToken;
     }
 
     function _getFlowRate(uint256 taxRateBPS, uint256 price) internal pure returns (int96) {
