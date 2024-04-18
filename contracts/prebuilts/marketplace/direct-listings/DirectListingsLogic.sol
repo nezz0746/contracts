@@ -294,19 +294,16 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
             "Marketplace: not tax beneficiary or landlord"
         );
 
-        require(
-            ISuperToken(tokenX).balanceOf(_currentListingNFTOwner(listing)) == 0,
-            "Marketplace: current listing owner has balance"
-        );
-
         address listingOwner = _currentListingNFTOwner(listing);
         // Get total flowRate to beneficiary
         (, int96 totalFlowRate, , ) = ISuperToken(tokenX).getFlowInfo(listingOwner, listing.taxBeneficiary);
         int96 listingFlowRate = _getFlowRate(listing.taxRate, listing.pricePerToken);
 
-        if (totalFlowRate > listingFlowRate)
-            _updateStream(tokenX, listingOwner, listing.taxBeneficiary, totalFlowRate - listingFlowRate);
-        else _cancelStream(tokenX, listingOwner, listing.taxBeneficiary);
+        if (totalFlowRate > 0) {
+            if (totalFlowRate > listingFlowRate)
+                _updateStream(tokenX, listingOwner, listing.taxBeneficiary, totalFlowRate - listingFlowRate);
+            else _cancelStream(tokenX, listingOwner, listing.taxBeneficiary);
+        }
 
         _transferListingTokens(listingOwner, listing.taxBeneficiary, listing.quantity, listing);
     }
