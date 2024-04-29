@@ -287,17 +287,20 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
         Listing memory listing = _directListingsStorage().listings[_listingId];
 
         address tokenX = _getTokenX(listing.currency, listing.assetContract);
+        int96 listingFlowRate = _getFlowRate(listing.taxRate, listing.pricePerToken);
 
         require(
             _msgSender() == listing.taxBeneficiary ||
                 Permissions(address(this)).hasRoleWithSwitch(LANDLORD_ROLE, _msgSender()),
             "Marketplace: not tax beneficiary or landlord"
         );
-
         address listingOwner = _currentListingNFTOwner(listing);
-        // Get total flowRate to beneficiary
         (, int96 totalFlowRate, , ) = ISuperToken(tokenX).getFlowInfo(listingOwner, listing.taxBeneficiary);
-        int96 listingFlowRate = _getFlowRate(listing.taxRate, listing.pricePerToken);
+
+        require(
+            totalFlowRate < listingFlowRate || ISuperToken(tokenX).balanceOf(listing.listingOwner) == 0,
+            "Marketplace: owner has balance"
+        );
 
         if (totalFlowRate > 0) {
             if (totalFlowRate > listingFlowRate)
