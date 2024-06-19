@@ -417,7 +417,9 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
 
         _payout(buyer, currentListingOwner, _currency, targetTotalPrice, listing);
 
-        _handleTaxStreams(currentListingOwner, buyer, listing.taxBeneficiary, listing);
+        if (listing.taxRate > 0) {
+            _handleTaxStreams(currentListingOwner, buyer, listing.taxBeneficiary, listing);
+        }
 
         // PERPETUAL:
         // - transfer from direct owner of NFT instead of listing creator
