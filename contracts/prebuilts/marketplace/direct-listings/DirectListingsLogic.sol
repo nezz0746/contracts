@@ -245,14 +245,16 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
                     tokenX,
                     listingCreator,
                     listing.taxBeneficiary,
-                    totalFlowRate + newListingFlowRate - listingFlowRate
+                    totalFlowRate + newListingFlowRate - listingFlowRate,
+                    abi.encode(listing.listingId)
                 );
             } else {
                 _updateStream(
                     tokenX,
                     listingCreator,
                     listing.taxBeneficiary,
-                    totalFlowRate - listingFlowRate + newListingFlowRate
+                    totalFlowRate - listingFlowRate + newListingFlowRate,
+                    abi.encode(listing.listingId)
                 );
             }
         }
@@ -275,8 +277,14 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
         int96 listingFlowRate = _getFlowRate(listing.taxRate, listing.pricePerToken);
 
         if (totalFlowRate > listingFlowRate)
-            _updateStream(tokenX, listingOwner, listing.taxBeneficiary, totalFlowRate - listingFlowRate);
-        else _cancelStream(tokenX, listingOwner, listing.taxBeneficiary);
+            _updateStream(
+                tokenX,
+                listingOwner,
+                listing.taxBeneficiary,
+                totalFlowRate - listingFlowRate,
+                abi.encode(listing.listingId)
+            );
+        else _cancelStream(tokenX, listingOwner, listing.taxBeneficiary, abi.encode(listing.listingId));
 
         _transferListingTokens(listingOwner, listing.taxBeneficiary, listing.quantity, listing);
 
@@ -304,8 +312,14 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
 
         if (totalFlowRate > 0) {
             if (totalFlowRate > listingFlowRate)
-                _updateStream(tokenX, listingOwner, listing.taxBeneficiary, totalFlowRate - listingFlowRate);
-            else _cancelStream(tokenX, listingOwner, listing.taxBeneficiary);
+                _updateStream(
+                    tokenX,
+                    listingOwner,
+                    listing.taxBeneficiary,
+                    totalFlowRate - listingFlowRate,
+                    abi.encode(listing.listingId)
+                );
+            else _cancelStream(tokenX, listingOwner, listing.taxBeneficiary, abi.encode(listing.listingId));
         }
 
         _transferListingTokens(listingOwner, listing.taxBeneficiary, listing.quantity, listing);
@@ -714,30 +728,54 @@ contract DirectListingsLogic is IDirectListings, ReentrancyGuard, ERC2771Context
         // Cancel of reduce stream flow of account about to sell the NFT
         if (receiver != _currentListingNFTOwner(listing)) {
             if (previousSenderFlowRate > listingFlowRate)
-                _updateStream(tokenX, previousSender, receiver, previousSenderFlowRate - listingFlowRate);
-            else _cancelStream(tokenX, previousSender, receiver);
+                _updateStream(
+                    tokenX,
+                    previousSender,
+                    receiver,
+                    previousSenderFlowRate - listingFlowRate,
+                    abi.encode(listing.listingId)
+                );
+            else _cancelStream(tokenX, previousSender, receiver, abi.encode(listing.listingId));
         }
 
         (, int96 newSenderFlowRate, , ) = ISuperToken(tokenX).getFlowInfo(newSender, receiver);
 
         // Create or update stream flow of account about to buy the NFT
         if (newSenderFlowRate == 0) {
-            _createStream(tokenX, newSender, receiver, listingFlowRate);
+            _createStream(tokenX, newSender, receiver, listingFlowRate, abi.encode(listing.listingId));
         } else {
-            _updateStream(tokenX, newSender, receiver, listingFlowRate + newSenderFlowRate);
+            _updateStream(
+                tokenX,
+                newSender,
+                receiver,
+                listingFlowRate + newSenderFlowRate,
+                abi.encode(listing.listingId)
+            );
         }
     }
 
-    function _createStream(address tokenX, address sender, address receiver, int96 flowRate) internal {
-        ISuperToken(tokenX).createFlowFrom(sender, receiver, flowRate);
+    function _createStream(
+        address tokenX,
+        address sender,
+        address receiver,
+        int96 flowRate,
+        bytes memory data
+    ) internal {
+        ISuperToken(tokenX).createFlowFrom(sender, receiver, flowRate, data);
     }
 
-    function _updateStream(address tokenX, address sender, address receiver, int96 flowRate) internal {
-        ISuperToken(tokenX).updateFlowFrom(sender, receiver, flowRate);
+    function _updateStream(
+        address tokenX,
+        address sender,
+        address receiver,
+        int96 flowRate,
+        bytes memory data
+    ) internal {
+        ISuperToken(tokenX).updateFlowFrom(sender, receiver, flowRate, data);
     }
 
-    function _cancelStream(address tokenX, address sender, address receiver) internal {
-        ISuperToken(tokenX).deleteFlowFrom(sender, receiver);
+    function _cancelStream(address tokenX, address sender, address receiver, bytes memory data) internal {
+        ISuperToken(tokenX).deleteFlowFrom(sender, receiver, data);
     }
 
     function _getTokenX(address underlying, address commonAsset) internal view returns (address) {
